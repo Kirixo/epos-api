@@ -1,0 +1,16 @@
+from __future__ import annotations
+
+from typing import Protocol
+
+from app.domain.pagination import Pagination
+from app.domain.user.entity import UserEntity
+
+
+
+class UserRepositoryProtocol(Protocol):
+    def save(self, *, entity: UserEntity) -> UserEntity: ...
+    def delete(self, *, id: int) -> UserEntity | None: ...
+    def list(self, *, pagination: Pagination | None = None) -> list[UserEntity]: ...
+    def get(self, *, id: int) -> UserEntity | None: ...
+    def get_by_email(self, *,  email: str) -> UserEntity | None: ...
+    
