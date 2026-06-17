@@ -13,7 +13,6 @@ __pycache__/
 *.py[codz]
 *$py.class
 *.so
-*.md
 
 *.xlsx
 settings.json

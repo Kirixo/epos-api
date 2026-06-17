@@ -13,7 +13,8 @@ COPY mypy.ini .
 COPY ./app ./app
 COPY ./etc ./etc
 COPY ./tests ./tests
-#COPY ./alembic.ini ./alembic.ini
+COPY ./alembic.ini ./alembic.ini
+COPY ./alembic ./alembic
 #COPY ./pytest.ini ./pytest.ini
 
 EXPOSE 8000

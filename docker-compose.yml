@@ -47,6 +47,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    volumes:
+      - ./alembic:/app/alembic
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
