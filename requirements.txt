@@ -1,0 +1,11 @@
+fastapi==0.135.1
+uvicorn[standard]==0.34.3
+SQLAlchemy==2.0.43
+psycopg2-binary==2.9.11
+alembic==1.16.5
+pydantic-settings==2.11.0
+pytest==9.0.2
+asyncio==4.0.0
+requests==2.32.5
+python-multipart==0.0.22
+bcrypt==5.0.0
