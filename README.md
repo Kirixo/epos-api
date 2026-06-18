@@ -1,7 +1,7 @@
 # Epos API
 Self-hosted backend API for Epos PKM.
 
-[![Tests](https://github.com/kirixo/opepic/actions/workflows/ci-cd.yml/badge.svg)](https://github.com/kirixo/opepic/actions/workflows/ci-cd.yml)
+[![Tests](https://github.com/kirixo/epos-api/actions/workflows/ci-cd.yml/badge.svg)](https://github.com/kirixo/epos-api/actions/workflows/ci-cd.yml)
 
 ## Running the Project
 
