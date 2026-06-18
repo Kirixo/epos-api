@@ -1,4 +1,7 @@
 # Epos API
+
+[![Tests](https://github.com/kirixo/opepic/actions/workflows/ci-cd.yml/badge.svg)](https://github.com/kirixo/opepic/actions/workflows/ci-cd.yml)
+
 ## Running the Project
 
 Build and start the application:
@@ -19,5 +22,6 @@ docker compose exec api alembic upgrade head
 
 Run the full pytest suite:
 ```bash
+docker compose exec api alembic upgrade head
 docker compose exec api pytest tests/
 ```
