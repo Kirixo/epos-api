@@ -10,7 +10,6 @@ class AuthenticationCommandsMapper:
     @classmethod
     def user_domain_to_value(cls, domain: UserEntity) -> UserResponseValue:
         return UserResponseValue(
-            name=domain.name,
             email=domain.email
         )
     

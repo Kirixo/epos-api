@@ -2,6 +2,7 @@ FROM python:3.14-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
+ENV PYTHONPATH=/app
 
 WORKDIR /app
 
@@ -13,7 +14,8 @@ COPY mypy.ini .
 COPY ./app ./app
 COPY ./etc ./etc
 COPY ./tests ./tests
-#COPY ./alembic.ini ./alembic.ini
+COPY ./alembic.ini ./alembic.ini
+COPY ./alembic ./alembic
 #COPY ./pytest.ini ./pytest.ini
 
 EXPOSE 8000

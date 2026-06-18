@@ -76,9 +76,9 @@ class AuthenticationService(AuthenticationProtocol):
             )
             
             entity = UserEntity(
-                name=command.surname,
                 email=command.email,
-                password_hash=password
+                password_hash=password,
+                password_salt=password
             )
             
             new_user = uow.user_repo.save(
