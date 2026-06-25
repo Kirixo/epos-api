@@ -1,11 +1,10 @@
 from app.application.authentication.authentication_protocol import AuthenticationProtocol
-from app.application.authentication.commands import UserLoginCommand, UserRegistrationCommand
-from app.application.authentication.exceptions import EmailIsExist, InvalidOrExpiredToken, InvalidPasswordOrEmail
+from app.application.authentication.commands import UserLoginCommand
+from app.application.authentication.exceptions import InvalidOrExpiredToken, InvalidPasswordOrEmail
 from app.application.authentication.responses import ResolvedUserResponse
 from app.domain.hash.entity import HashableValue
 from app.domain.hash.hash_repository_protocol import HashProtocol
 from app.domain.uow import UnitOfWorkFactoryProtocol
-from app.domain.user.entity import UserEntity
 
 
 class AuthenticationService(AuthenticationProtocol):
@@ -63,31 +62,3 @@ class AuthenticationService(AuthenticationProtocol):
             access_token=str(exist_user.id),
             token_type="bearer"
         )
-    
-    def register(self, command: UserRegistrationCommand) -> ResolvedUserResponse:
-        with self._uow_factory.create() as uow:
-            exist_user = uow.user_repo.get_by_email(email=command.email)
-            
-            if exist_user is not None:
-                raise EmailIsExist()
-            
-            password = self._hash_service.hash_value(
-                HashableValue.from_str(command.password)
-            )
-            
-            entity = UserEntity(
-                email=command.email,
-                password_hash=password,
-                password_salt=password
-            )
-            
-            new_user = uow.user_repo.save(
-                entity=entity
-            )
-        
-        login_user = self.login(UserLoginCommand(
-            email=new_user.email,
-            password=command.password,
-        ))
-                    
-        return login_user

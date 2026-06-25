@@ -1,0 +1,999 @@
+diff --git a/app/api/authentication/authentication.py b/app/api/authentication/authentication.py
+deleted file mode 100644
+index 5885e81..0000000
+--- a/app/api/authentication/authentication.py
++++ /dev/null
+@@ -1,43 +0,0 @@
+-from typing import Annotated
+-
+-from fastapi import APIRouter, Body, Depends, Request
+-from fastapi.security import OAuth2PasswordRequestForm
+-
+-from app.api.authentication.payloads import UserRegistrationSchemaPayload
+-from app.application.authentication.authentication_protocol import AuthenticationProtocol
+-from app.application.authentication.commands import UserLoginCommand, UserRegistrationCommand
+-from app.application.base import JsonDict
+-from app.di.dependencies import user_resolver
+-
+-
+-router = APIRouter()
+-
+-@router.post("/token", tags=["authentication"])
+-def login(
+-    form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
+-    authentication_service: AuthenticationProtocol = Depends(user_resolver)
+-) -> JsonDict:
+-    resolved_user = authentication_service.login(
+-        UserLoginCommand(
+-            email=form_data.username, 
+-            password=form_data.password
+-        )
+-    )
+-    return resolved_user.model_dump()
+-
+-@router.post("/register", tags=["authentication"])
+-def register(
+-    body: Annotated[UserRegistrationSchemaPayload, Body()],
+-    authentication_service: AuthenticationProtocol = Depends(user_resolver),
+-) -> JsonDict:
+-    resolved_user = authentication_service.register(
+-        UserRegistrationCommand(
+-            email=body.email,
+-            password=body.password,
+-            name=body.name,
+-            surname=body.surname,
+-            nickname=body.nickname
+-        )
+-    )
+-    
+-    return resolved_user.model_dump()
+diff --git a/app/api/authentication/payloads.py b/app/api/authentication/payloads.py
+deleted file mode 100644
+index aef0b64..0000000
+--- a/app/api/authentication/payloads.py
++++ /dev/null
+@@ -1,9 +0,0 @@
+-from pydantic import BaseModel, Field
+-
+-
+-class UserRegistrationSchemaPayload(BaseModel):
+-    email: str = Field(min_length=3, max_length=50)
+-    password: str = Field(min_length=8)
+-    name: str = Field(min_length=2, max_length=100)
+-    surname: str = Field(min_length=2, max_length=100)
+-    nickname: str = Field(min_length=2, max_length=32)
+\ No newline at end of file
+diff --git a/app/api/router.py b/app/api/router.py
+index 5d7474a..2581eee 100644
+--- a/app/api/router.py
++++ b/app/api/router.py
+@@ -1,8 +1,6 @@
+ from fastapi import APIRouter
+ 
+ from app.api.v1.router import router as v1_router
+-from app.api.authentication.authentication import router as authentication_router
+ 
+ router = APIRouter()
+ router.include_router(v1_router)
+-router.include_router(authentication_router)
+diff --git a/app/api/v1/auth/router.py b/app/api/v1/auth/router.py
+new file mode 100644
+index 0000000..fe94fa1
+--- /dev/null
++++ b/app/api/v1/auth/router.py
+@@ -0,0 +1,24 @@
++from typing import Annotated
++from fastapi import APIRouter, Depends
++from fastapi.security import OAuth2PasswordRequestForm
++
++from app.application.authentication.authentication_protocol import AuthenticationProtocol
++from app.application.authentication.commands import UserLoginCommand
++from app.application.authentication.responses import ResolvedUserResponse
++from app.application.base import JsonDict
++from app.di.dependencies import get_authentication_service
++
++router = APIRouter()
++
++@router.post("/token", response_model=ResolvedUserResponse, tags=["auth"])
++def login(
++    form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
++    auth_service: AuthenticationProtocol = Depends(get_authentication_service)
++) -> JsonDict:
++    resolved_user = auth_service.login(
++        UserLoginCommand(
++            email=form_data.username, 
++            password=form_data.password
++        )
++    )
++    return resolved_user.model_dump()
+diff --git a/app/api/v1/router.py b/app/api/v1/router.py
+index d0a5c86..3ee5f49 100644
+--- a/app/api/v1/router.py
++++ b/app/api/v1/router.py
+@@ -1,8 +1,10 @@
+ from fastapi import APIRouter
+ 
+ from app.api.v1.crud.crud import router as batch_router
++from app.api.v1.users.router import router as users_router
++from app.api.v1.auth.router import router as auth_router
+ 
+ router = APIRouter(prefix="/v1")
+ router.include_router(batch_router, prefix="/crud")
+-
+-# router.include_router(..., prefix="/...")
+\ No newline at end of file
++router.include_router(users_router, prefix="/users")
++router.include_router(auth_router, prefix="/auth")
+\ No newline at end of file
+diff --git a/app/api/v1/users/payloads.py b/app/api/v1/users/payloads.py
+new file mode 100644
+index 0000000..173052b
+--- /dev/null
++++ b/app/api/v1/users/payloads.py
+@@ -0,0 +1,14 @@
++from pydantic import BaseModel, Field
++
++class UserRegistrationPayload(BaseModel):
++    email: str = Field(..., min_length=3, max_length=50)
++    password: str = Field(..., min_length=8)
++
++class UserUpdatePayload(BaseModel):
++    email: str | None = Field(None, min_length=3, max_length=50)
++    password: str | None = Field(None, min_length=8)
++    old_password: str | None = Field(None, min_length=8)
++
++class UserResponsePayload(BaseModel):
++    id: int
++    email: str
+diff --git a/app/api/v1/users/router.py b/app/api/v1/users/router.py
+new file mode 100644
+index 0000000..7d57846
+--- /dev/null
++++ b/app/api/v1/users/router.py
+@@ -0,0 +1,67 @@
++from typing import Annotated
++from fastapi import APIRouter, Body, Depends, Request, Response, status
++
++from app.api.v1.users.payloads import UserRegistrationPayload, UserUpdatePayload, UserResponsePayload
++from app.application.users.user_protocol import UserServiceProtocol
++from app.application.users.commands import UserRegistrationCommand, UserUpdateCommand
++from app.application.authentication.responses import ResolvedUserResponse
++from app.application.authentication.authentication_protocol import AuthenticationProtocol
++from app.application.authentication.commands import UserLoginCommand
++from app.application.base import JsonDict
++from app.di.dependencies import get_user_service, resolve_user, get_authentication_service
++
++router = APIRouter()
++
++@router.post("/register", response_model=ResolvedUserResponse, status_code=status.HTTP_201_CREATED, tags=["users"])
++def register(
++    body: Annotated[UserRegistrationPayload, Body()],
++    user_service: UserServiceProtocol = Depends(get_user_service),
++    auth_service: AuthenticationProtocol = Depends(get_authentication_service),
++) -> JsonDict:
++    # 1. Register the user
++    user_resp = user_service.register(
++        UserRegistrationCommand(
++            email=body.email,
++            password=body.password
++        )
++    )
++    # 2. Login the registered user to return the token
++    login_user = auth_service.login(
++        UserLoginCommand(
++            email=body.email,
++            password=body.password
++        )
++    )
++    return login_user.model_dump()
++
++@router.get("/me", response_model=UserResponsePayload, tags=["users"])
++def get_me(
++    current_user: Annotated[ResolvedUserResponse, Depends(resolve_user)],
++    user_service: UserServiceProtocol = Depends(get_user_service),
++) -> JsonDict:
++    user_resp = user_service.get_by_id(current_user.id)
++    return user_resp.model_dump()
++
++@router.patch("/me", response_model=UserResponsePayload, tags=["users"])
++def update_me(
++    body: Annotated[UserUpdatePayload, Body()],
++    current_user: Annotated[ResolvedUserResponse, Depends(resolve_user)],
++    user_service: UserServiceProtocol = Depends(get_user_service),
++) -> JsonDict:
++    user_resp = user_service.update(
++        user_id=current_user.id,
++        command=UserUpdateCommand(
++            email=body.email,
++            password=body.password,
++            old_password=body.old_password
++        )
++    )
++    return user_resp.model_dump()
++
++@router.delete("/me", status_code=status.HTTP_204_NO_CONTENT, tags=["users"])
++def delete_me(
++    current_user: Annotated[ResolvedUserResponse, Depends(resolve_user)],
++    user_service: UserServiceProtocol = Depends(get_user_service),
++) -> Response:
++    user_service.delete(current_user.id)
++    return Response(status_code=status.HTTP_204_NO_CONTENT)
+diff --git a/app/application/authentication/authentication_protocol.py b/app/application/authentication/authentication_protocol.py
+index 8cb9ba7..a301104 100644
+--- a/app/application/authentication/authentication_protocol.py
++++ b/app/application/authentication/authentication_protocol.py
+@@ -1,6 +1,6 @@
+ from typing import Protocol
+ 
+-from app.application.authentication.commands import UserLoginCommand, UserRegistrationCommand
++from app.application.authentication.commands import UserLoginCommand
+ from app.application.authentication.responses import ResolvedUserResponse
+ 
+ 
+@@ -8,5 +8,4 @@ class AuthenticationProtocol(Protocol):
+ 
+     def verify_token(self, token: str) -> str: ...
+     def resolve_user(self, token: str) -> ResolvedUserResponse: ...
+-    def login(self, command: UserLoginCommand) -> ResolvedUserResponse: ...
+-    def register(self, command: UserRegistrationCommand) -> ResolvedUserResponse: ...
+\ No newline at end of file
++    def login(self, command: UserLoginCommand) -> ResolvedUserResponse: ...
+\ No newline at end of file
+diff --git a/app/application/authentication/commands.py b/app/application/authentication/commands.py
+index a197b17..7ae444a 100644
+--- a/app/application/authentication/commands.py
++++ b/app/application/authentication/commands.py
+@@ -4,11 +4,4 @@ from app.application.base import FlexibleCommand
+ class UserLoginCommand(FlexibleCommand):
+     email: str
+     password: str
+-    
+-class UserRegistrationCommand(FlexibleCommand):
+-    email: str
+-    password: str
+-    name: str
+-    surname: str
+-    nickname: str
+     
+\ No newline at end of file
+diff --git a/app/application/authentication/exceptions.py b/app/application/authentication/exceptions.py
+index b0ea9d4..7421283 100644
+--- a/app/application/authentication/exceptions.py
++++ b/app/application/authentication/exceptions.py
+@@ -9,12 +9,9 @@ class AuthenticationException(BaseBoundaryException):
+ 
+ class InvalidOrExpiredToken(AuthenticationException):
+     def __init__(self) -> None:
+-        super().__init__()
++        super().__init__(message_key="invalid_token", code=401)
+         
+ class InvalidPasswordOrEmail(AuthenticationException):
+     def __init__(self) -> None:
+-        super().__init__()
+-        
+-class EmailIsExist(AuthenticationException):
+-    def __init__(self) -> None:
+-        super().__init__()
+\ No newline at end of file
++        super().__init__(message_key="invalid_credentials", code=401)
++        
+\ No newline at end of file
+diff --git a/app/application/authentication/service.py b/app/application/authentication/service.py
+index 8f067a1..4fac5d1 100644
+--- a/app/application/authentication/service.py
++++ b/app/application/authentication/service.py
+@@ -1,11 +1,10 @@
+ from app.application.authentication.authentication_protocol import AuthenticationProtocol
+-from app.application.authentication.commands import UserLoginCommand, UserRegistrationCommand
+-from app.application.authentication.exceptions import EmailIsExist, InvalidOrExpiredToken, InvalidPasswordOrEmail
++from app.application.authentication.commands import UserLoginCommand
++from app.application.authentication.exceptions import InvalidOrExpiredToken, InvalidPasswordOrEmail
+ from app.application.authentication.responses import ResolvedUserResponse
+ from app.domain.hash.entity import HashableValue
+ from app.domain.hash.hash_repository_protocol import HashProtocol
+ from app.domain.uow import UnitOfWorkFactoryProtocol
+-from app.domain.user.entity import UserEntity
+ 
+ 
+ class AuthenticationService(AuthenticationProtocol):
+@@ -62,32 +61,4 @@ class AuthenticationService(AuthenticationProtocol):
+             id=exist_user.id,
+             access_token=str(exist_user.id),
+             token_type="bearer"
+-        )
+-    
+-    def register(self, command: UserRegistrationCommand) -> ResolvedUserResponse:
+-        with self._uow_factory.create() as uow:
+-            exist_user = uow.user_repo.get_by_email(email=command.email)
+-            
+-            if exist_user is not None:
+-                raise EmailIsExist()
+-            
+-            password = self._hash_service.hash_value(
+-                HashableValue.from_str(command.password)
+-            )
+-            
+-            entity = UserEntity(
+-                email=command.email,
+-                password_hash=password,
+-                password_salt=password
+-            )
+-            
+-            new_user = uow.user_repo.save(
+-                entity=entity
+-            )
+-        
+-        login_user = self.login(UserLoginCommand(
+-            email=new_user.email,
+-            password=command.password,
+-        ))
+-                    
+-        return login_user
+\ No newline at end of file
++        )
+\ No newline at end of file
+diff --git a/app/application/users/commands.py b/app/application/users/commands.py
+new file mode 100644
+index 0000000..ce882d0
+--- /dev/null
++++ b/app/application/users/commands.py
+@@ -0,0 +1,10 @@
++from app.application.base import FlexibleCommand
++
++class UserRegistrationCommand(FlexibleCommand):
++    email: str
++    password: str
++
++class UserUpdateCommand(FlexibleCommand):
++    email: str | None = None
++    password: str | None = None
++    old_password: str | None = None
+diff --git a/app/application/users/exceptions.py b/app/application/users/exceptions.py
+new file mode 100644
+index 0000000..671f445
+--- /dev/null
++++ b/app/application/users/exceptions.py
+@@ -0,0 +1,18 @@
++from typing import Any, Dict
++from app.core.exception import BaseBoundaryException
++
++class UserException(BaseBoundaryException):
++    def __init__(self, message_key: str = "internal", context: Dict[str, Any]={}, code: int=500):
++        super().__init__(message_key, context, code)
++
++class EmailAlreadyExists(UserException):
++    def __init__(self) -> None:
++        super().__init__(message_key="email_exists", code=400)
++
++class InvalidOldPassword(UserException):
++    def __init__(self) -> None:
++        super().__init__(message_key="invalid_old_password", code=400)
++
++class UserNotFound(UserException):
++    def __init__(self) -> None:
++        super().__init__(message_key="user_not_found", code=404)
+diff --git a/app/application/users/responses.py b/app/application/users/responses.py
+new file mode 100644
+index 0000000..1a1be34
+--- /dev/null
++++ b/app/application/users/responses.py
+@@ -0,0 +1,5 @@
++from app.application.base import BaseResponse
++
++class UserResponse(BaseResponse):
++    id: int
++    email: str
+diff --git a/app/application/users/service.py b/app/application/users/service.py
+new file mode 100644
+index 0000000..a6313c3
+--- /dev/null
++++ b/app/application/users/service.py
+@@ -0,0 +1,110 @@
++from datetime import UTC, datetime
++from app.application.users.commands import UserRegistrationCommand, UserUpdateCommand
++from app.application.users.exceptions import EmailAlreadyExists, InvalidOldPassword, UserNotFound
++from app.application.users.responses import UserResponse
++from app.application.users.user_protocol import UserServiceProtocol
++from app.domain.hash.entity import HashableValue
++from app.domain.hash.hash_repository_protocol import HashProtocol
++from app.domain.uow import UnitOfWorkFactoryProtocol
++from app.domain.user.entity import UserEntity
++
++class UserService(UserServiceProtocol):
++    def __init__(
++        self,
++        uow_factory: UnitOfWorkFactoryProtocol,
++        hash_service: HashProtocol,
++    ) -> None:
++        self._uow_factory = uow_factory
++        self._hash_service = hash_service
++
++    def register(self, command: UserRegistrationCommand) -> UserResponse:
++        with self._uow_factory.create() as uow:
++            exist_user = uow.user_repo.get_by_email(email=command.email)
++            if exist_user is not None:
++                raise EmailAlreadyExists()
++            
++            hashed_pwd = self._hash_service.hash_value(
++                HashableValue.from_str(command.password)
++            )
++            
++            # Use random salt or fallback to hash for salt representation
++            salt = self._hash_service.random_hash()
++            
++            entity = UserEntity(
++                email=command.email,
++                password_hash=hashed_pwd,
++                password_salt=salt
++            )
++            
++            new_user = uow.user_repo.save(entity=entity)
++            
++            if new_user.id is None:
++                raise Exception("Failed to save user")
++            
++            return UserResponse(
++                id=new_user.id,
++                email=new_user.email
++            )
++
++    def update(self, user_id: int, command: UserUpdateCommand) -> UserResponse:
++        with self._uow_factory.create() as uow:
++            user = uow.user_repo.get(id=user_id)
++            if user is None:
++                raise UserNotFound()
++
++            # If email is updating, verify uniqueness
++            if command.email and command.email != user.email:
++                existing_email_user = uow.user_repo.get_by_email(email=command.email)
++                if existing_email_user is not None:
++                    raise EmailAlreadyExists()
++                user.email = command.email
++
++            # If password is updating, verify old password
++            if command.password:
++                if not command.old_password:
++                    raise InvalidOldPassword()
++                
++                is_correct = self._hash_service.compare_hash(
++                    raw_value=HashableValue.from_str(command.old_password),
++                    hash=user.password_hash
++                )
++                if not is_correct:
++                    raise InvalidOldPassword()
++                
++                hashed_pwd = self._hash_service.hash_value(
++                    HashableValue.from_str(command.password)
++                )
++                user.password_hash = hashed_pwd
++                user.password_changed_at = datetime.now(UTC)
++
++            updated_user = uow.user_repo.save(entity=user)
++            
++            if updated_user.id is None:
++                raise Exception("Failed to update user")
++            
++            return UserResponse(
++                id=updated_user.id,
++                email=updated_user.email
++            )
++
++    def delete(self, user_id: int) -> None:
++        with self._uow_factory.create() as uow:
++            user = uow.user_repo.get(id=user_id)
++            if user is None:
++                raise UserNotFound()
++            
++            uow.user_repo.delete(id=user_id)
++
++    def get_by_id(self, user_id: int) -> UserResponse:
++        with self._uow_factory.create() as uow:
++            user = uow.user_repo.get(id=user_id)
++            if user is None:
++                raise UserNotFound()
++            
++            if user.id is None:
++                raise Exception("Invalid user ID")
++                
++            return UserResponse(
++                id=user.id,
++                email=user.email
++            )
+diff --git a/app/application/users/user_protocol.py b/app/application/users/user_protocol.py
+new file mode 100644
+index 0000000..3595ad4
+--- /dev/null
++++ b/app/application/users/user_protocol.py
+@@ -0,0 +1,9 @@
++from typing import Protocol
++from app.application.users.commands import UserRegistrationCommand, UserUpdateCommand
++from app.application.users.responses import UserResponse
++
++class UserServiceProtocol(Protocol):
++    def register(self, command: UserRegistrationCommand) -> UserResponse: ...
++    def update(self, user_id: int, command: UserUpdateCommand) -> UserResponse: ...
++    def delete(self, user_id: int) -> None: ...
++    def get_by_id(self, user_id: int) -> UserResponse: ...
+diff --git a/app/di/dependencies.py b/app/di/dependencies.py
+index aa2f250..ec94ca9 100644
+--- a/app/di/dependencies.py
++++ b/app/di/dependencies.py
+@@ -10,6 +10,8 @@ from fastapi.security import OAuth2PasswordBearer
+ from app.application.authentication.authentication_protocol import AuthenticationProtocol
+ from app.application.authentication.responses import ResolvedUserResponse
+ from app.application.authentication.service import AuthenticationService
++from app.application.users.user_protocol import UserServiceProtocol
++from app.application.users.service import UserService
+ from app.application.authorization.service import AuthorizationService
+ from app.application.contracts.value_codec import ValueCodecProtocol
+ from app.application.crud.service import CrudService
+@@ -45,15 +47,21 @@ def get_crud_service(
+ ) -> CrudService:
+     return CrudService(uow_factory, authorization_service)
+ 
++def get_user_service(
++    uow_factory: UnitOfWorkFactoryProtocol = Depends(get_uow_factory),
++    hash_service: HashProtocol = Depends(get_hash_provider)
++) -> UserServiceProtocol:
++    return UserService(uow_factory, hash_service)
++
+ 
+ # ======================================================
+ # Індефікація юзера
+ # ======================================================
+ 
+-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+-# АААААААААААААААААААА АНТИПАТЕРНИ
++oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/v1/auth/token")
++
+ @lru_cache
+-def user_resolver(
++def get_authentication_service(
+     uow_factory: UnitOfWorkFactoryProtocol = Depends(get_uow_factory),
+     hash_service: HashProtocol = Depends(get_hash_provider)
+ ) -> AuthenticationProtocol:
+@@ -65,6 +73,6 @@ def user_resolver(
+ 
+ def resolve_user(
+     token: str = Depends(oauth2_scheme),
+-    user_resolver: AuthenticationProtocol = Depends(user_resolver)
++    auth_service: AuthenticationProtocol = Depends(get_authentication_service)
+ ) -> ResolvedUserResponse:
+-    return user_resolver.resolve_user(token)
++    return auth_service.resolve_user(token)
+diff --git a/app/infra/db/models/models.py b/app/infra/db/models/models.py
+index 8ea72a2..5492995 100644
+--- a/app/infra/db/models/models.py
++++ b/app/infra/db/models/models.py
+@@ -1,8 +1,7 @@
+ from datetime import datetime
+ from typing import Any
+ 
+-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String
+-from sqlalchemy.dialects.postgresql import JSONB
++from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, JSON
+ from sqlalchemy.orm import Mapped, mapped_column, relationship
+ from sqlalchemy.sql import func
+ 
+@@ -57,7 +56,7 @@ class AuditLog(Base):
+     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+     user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
+     action: Mapped[str] = mapped_column(String(255), nullable=False)
+-    details: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default={})
++    details: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default={})
+     ip_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+     ip_salt: Mapped[str] = mapped_column(String(255), nullable=False)
+     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+diff --git a/app/infra/db/repositories/factory.py b/app/infra/db/repositories/factory.py
+index 8817894..af9f5cb 100644
+--- a/app/infra/db/repositories/factory.py
++++ b/app/infra/db/repositories/factory.py
+@@ -1,35 +1,81 @@
+-from __future__ import annotations
+-
+ from sqlalchemy.orm import Session
+ 
+ from app.domain.access.user_access_repository_protocol import UserWorkspaceAccessRepositoryProtocol
+ from app.domain.crud.crud_repository_protocol import CrudRepositoryProtocol
+ from app.domain.user.user_repository_protocol import UserRepositoryProtocol
++from app.infra.db.repositories.user_repository import UserRepository
++from app.domain.access.entity import UserWorkspaceAccessEntity
++from app.domain.pagination import Pagination
++from app.domain.crud.entity import CrudEntity
++
++
++class DummyWorkspaceAccessRepository(UserWorkspaceAccessRepositoryProtocol):
++    def __init__(self, session: Session) -> None:
++        self.session = session
++
++    def save(self, *, entity: UserWorkspaceAccessEntity) -> UserWorkspaceAccessEntity:
++        raise NotImplementedError
++
++    def save_many(self, *, entities: list[UserWorkspaceAccessEntity]) -> list[UserWorkspaceAccessEntity]:
++        raise NotImplementedError
++
++    def get_by_user_and_workspace(self, *, user_id: int, workspace_id: int) -> UserWorkspaceAccessEntity | None:
++        raise NotImplementedError
++
++    def list_by_user_id(
++        self,
++        *,
++        user_id: int,
++        pagination: Pagination | None = None,
++    ) -> list[UserWorkspaceAccessEntity]:
++        raise NotImplementedError
++
++    def delete(
++        self,
++        *,
++        user_id: int,
++        app_id: int
++    ) -> UserWorkspaceAccessEntity:
++        raise NotImplementedError
++
++    def list_by_workspace_id(
++        self,
++        *,
++        workspace_id: int,
++        pagination: Pagination | None = None,
++    ) -> list[UserWorkspaceAccessEntity]:
++        raise NotImplementedError
+ 
+ 
+-"""
+-Воно поивнно повертати вже готові репозиторії а не їх  протоколи.
++class DummyCrudRepository(CrudRepositoryProtocol):
++    def __init__(self, session: Session) -> None:
++        self.session = session
+ 
+-Умовно у нас 2 бази даних, одна із них чисто під юзерів (погстгрес)
+-а друга чисто під дані (монго). Тоді буде 2 теки в яких будуть 
+-реалізації цих репозиторіїв, а протокли (умовні інтерфейси) для
+-них будуть спільні. А ось оцей завод це буде збірка солянка чисто 
+-для UoW, ну в нашому випадку це буде год обжект для зв'язку з данними, фігня
+--- да, розумію, а ти хочеш думатаи більше і пробити під кожен сервіс/группу сервісів
+-свій UoW? А Unit of Work такий цікавий патерн, хоч і він реалізвоаний в деяких фреймворках для спілкеування з бд
+-але краще мати ще один звреху тіпа як декоратор, бо бог знає що воно може накоїти та можуть бути свої
+-реалізації для цього. як в нашому випадку може знадобитися UoW 
+-з репозиторіями чисто під резолвінг конфліктів в якому вде реалізована механіка 
+-того як їх резолвить, а зверху це буде просто репозиторії зі збреженням. Ну корчое почиатй та потруси геміні
+-"""
++    def save_many(
++        self,
++        entities: list[CrudEntity],
++    ) -> list[CrudEntity]:
++        raise NotImplementedError
++
++    def save(self, *, entity: CrudEntity) -> CrudEntity:
++        raise NotImplementedError
++
++    def delete(self, *, id: int) -> CrudEntity:
++        raise NotImplementedError
++
++    def list(self, *, pagination: Pagination | None = None) -> list[CrudEntity]:
++        raise NotImplementedError
++
++    def get(self, *, id: int) -> CrudEntity | None:
++        raise NotImplementedError
+ 
+ 
+ class GeneralRepositoriesFactory:
+     def workspace_access_repo(self, session: Session) -> UserWorkspaceAccessRepositoryProtocol:
+-        raise NotImplementedError
++        return DummyWorkspaceAccessRepository(session)
+     
+     def crud_repository(self, session: Session) ->  CrudRepositoryProtocol:
+-        raise NotImplementedError
++        return DummyCrudRepository(session)
+         
+     def user_repository(self, session: Session) -> UserRepositoryProtocol:
+-        raise NotImplementedError
+\ No newline at end of file
++        return UserRepository(session)
+\ No newline at end of file
+diff --git a/docker-compose.yml b/docker-compose.yml
+index 267f999..8128393 100644
+--- a/docker-compose.yml
++++ b/docker-compose.yml
+@@ -49,6 +49,8 @@ services:
+         condition: service_healthy
+     volumes:
+       - ./alembic:/app/alembic
++      - ./tests:/app/tests
++      - ./app:/app/app
+     environment:
+       POSTGRES_DB: ${POSTGRES_DB}
+       POSTGRES_USER: ${POSTGRES_USER}
+diff --git a/mypy.ini b/mypy.ini
+index 92c0a3b..7ff4880 100644
+--- a/mypy.ini
++++ b/mypy.ini
+@@ -7,4 +7,5 @@ check_untyped_defs = True
+ no_implicit_optional = True
+ warn_return_any = True
+ disallow_untyped_globals = True
+-disallow_any_unimported = True
+\ No newline at end of file
++disallow_any_unimported = True
++explicit_package_bases = True
+\ No newline at end of file
+diff --git a/requirements.txt b/requirements.txt
+index ffa2fb4..9dfa4f5 100644
+--- a/requirements.txt
++++ b/requirements.txt
+@@ -10,3 +10,5 @@ requests==2.32.5
+ python-multipart==0.0.22
+ bcrypt==5.0.0
+ pytest-cov==6.0.0
++httpx==0.27.0
++
+diff --git a/tests/conftest.py b/tests/conftest.py
+new file mode 100644
+index 0000000..d1f6c9e
+--- /dev/null
++++ b/tests/conftest.py
+@@ -0,0 +1,48 @@
++import pytest
++from fastapi.testclient import TestClient
++from sqlalchemy import create_engine
++from sqlalchemy.orm import sessionmaker
++
++from app.main import app
++from app.infra.db.models.base import Base
++from app.infra.db.models.models import User, UserSettings, RevokedToken, AuditLog  # Ensure models are imported
++from app.di.dependencies import get_uow_factory
++from app.infra.db.guow import GeneralUnitOfWorkFactory
++
++# Create in-memory SQLite database with StaticPool for testing
++from sqlalchemy.pool import StaticPool
++SQLALCHEMY_DATABASE_URL = "sqlite:///:memory:"
++engine = create_engine(
++    SQLALCHEMY_DATABASE_URL,
++    connect_args={"check_same_thread": False},
++    poolclass=StaticPool
++)
++TestingSessionFactory = sessionmaker(autocommit=False, autoflush=False, bind=engine)
++
++# Create tables
++Base.metadata.create_all(bind=engine)
++
++@pytest.fixture(scope="function", autouse=True)
++def clean_db() -> None:
++    # Clean up database tables before each test
++    connection = engine.connect()
++    transaction = connection.begin()
++    
++    # Delete data from all tables
++    for table in reversed(Base.metadata.sorted_tables):
++        connection.execute(table.delete())
++        
++    transaction.commit()
++    connection.close()
++
++def override_get_uow_factory() -> GeneralUnitOfWorkFactory:
++    return GeneralUnitOfWorkFactory(TestingSessionFactory)
++
++# Override the dependency in the app
++app.dependency_overrides[get_uow_factory] = override_get_uow_factory
++
++from typing import Generator
++@pytest.fixture(scope="module")
++def client() -> Generator[TestClient, None, None]:
++    with TestClient(app, raise_server_exceptions=False) as c:
++        yield c
+diff --git a/tests/test.db b/tests/test.db
+new file mode 100644
+index 0000000..97e6103
+Binary files /dev/null and b/tests/test.db differ
+diff --git a/tests/test_api_endpoints.py b/tests/test_api_endpoints.py
+new file mode 100644
+index 0000000..93b95ed
+--- /dev/null
++++ b/tests/test_api_endpoints.py
+@@ -0,0 +1,107 @@
++from fastapi.testclient import TestClient
++
++def test_user_registration_success(client: TestClient) -> None:
++    # 1. Register a new user
++    payload = {
++        "email": "api_test@example.com",
++        "password": "securepassword123"
++    }
++    response = client.post("/v1/users/register", json=payload)
++    assert response.status_code == 201
++    
++    data = response.json()
++    assert "access_token" in data
++    assert data["token_type"] == "bearer"
++    assert "id" in data
++
++def test_user_registration_duplicate(client: TestClient) -> None:
++    payload = {
++        "email": "dup_api@example.com",
++        "password": "securepassword123"
++    }
++    # First registration
++    response = client.post("/v1/users/register", json=payload)
++    assert response.status_code == 201
++    
++    # Second registration (duplicate)
++    response = client.post("/v1/users/register", json=payload)
++    assert response.status_code == 400
++    assert "email_exists" in str(response.json())
++
++def test_user_login_success(client: TestClient) -> None:
++    # Register user
++    payload = {
++        "email": "login_api@example.com",
++        "password": "securepassword123"
++    }
++    client.post("/v1/users/register", json=payload)
++    
++    # Login to get token
++    login_data = {
++        "username": "login_api@example.com",
++        "password": "securepassword123"
++    }
++    response = client.post("/v1/auth/token", data=login_data)
++    assert response.status_code == 200
++    
++    data = response.json()
++    assert "access_token" in data
++    assert data["token_type"] == "bearer"
++
++def test_user_login_failure(client: TestClient) -> None:
++    login_data = {
++        "username": "non_existent@example.com",
++        "password": "password"
++    }
++    response = client.post("/v1/auth/token", data=login_data)
++    assert response.status_code == 401
++
++def test_get_current_user_profile(client: TestClient) -> None:
++    payload = {
++        "email": "profile_api@example.com",
++        "password": "securepassword123"
++    }
++    reg_resp = client.post("/v1/users/register", json=payload)
++    token = reg_resp.json()["access_token"]
++    
++    headers = {"Authorization": f"Bearer {token}"}
++    response = client.get("/v1/users/me", headers=headers)
++    assert response.status_code == 200
++    
++    data = response.json()
++    assert data["email"] == "profile_api@example.com"
++    assert "id" in data
++
++def test_update_current_user_profile(client: TestClient) -> None:
++    payload = {
++        "email": "update_api@example.com",
++        "password": "securepassword123"
++    }
++    reg_resp = client.post("/v1/users/register", json=payload)
++    token = reg_resp.json()["access_token"]
++    
++    headers = {"Authorization": f"Bearer {token}"}
++    update_payload = {
++        "email": "updated_api@example.com",
++        "password": "newsecurepassword123",
++        "old_password": "securepassword123"
++    }
++    response = client.patch("/v1/users/me", json=update_payload, headers=headers)
++    assert response.status_code == 200
++    assert response.json()["email"] == "updated_api@example.com"
++
++def test_delete_current_user_profile(client: TestClient) -> None:
++    payload = {
++        "email": "delete_api@example.com",
++        "password": "securepassword123"
++    }
++    reg_resp = client.post("/v1/users/register", json=payload)
++    token = reg_resp.json()["access_token"]
++    
++    headers = {"Authorization": f"Bearer {token}"}
++    response = client.delete("/v1/users/me", headers=headers)
++    assert response.status_code == 204
++    
++    # Try fetching profile after deletion
++    response = client.get("/v1/users/me", headers=headers)
++    assert response.status_code == 401
+diff --git a/tests/test_touch.txt b/tests/test_touch.txt
+new file mode 100644
+index 0000000..e69de29
+diff --git a/tests/test_user_service.py b/tests/test_user_service.py
+new file mode 100644
+index 0000000..3c8585b
+--- /dev/null
++++ b/tests/test_user_service.py
+@@ -0,0 +1,90 @@
++import pytest
++from datetime import UTC, datetime
++from app.application.users.commands import UserRegistrationCommand, UserUpdateCommand
++from app.application.users.exceptions import EmailAlreadyExists, InvalidOldPassword, UserNotFound
++from app.application.users.service import UserService
++from app.infra.services.hashing import ServerHashProvider
++from app.infra.db.guow import GeneralUnitOfWorkFactory
++from tests.conftest import TestingSessionFactory
++
++@pytest.fixture
++def user_service() -> UserService:
++    uow_factory = GeneralUnitOfWorkFactory(TestingSessionFactory)
++    hash_service = ServerHashProvider()
++    return UserService(uow_factory, hash_service)
++
++def test_register_user_success(user_service: UserService) -> None:
++    cmd = UserRegistrationCommand(email="service_test@example.com", password="password123")
++    resp = user_service.register(cmd)
++    
++    assert resp.id is not None
++    assert resp.email == "service_test@example.com"
++    
++    # Retrieve user to verify
++    profile = user_service.get_by_id(resp.id)
++    assert profile.email == "service_test@example.com"
++
++def test_register_user_duplicate_email(user_service: UserService) -> None:
++    cmd = UserRegistrationCommand(email="duplicate@example.com", password="password123")
++    user_service.register(cmd)
++    
++    with pytest.raises(EmailAlreadyExists):
++        user_service.register(cmd)
++
++def test_get_user_not_found(user_service: UserService) -> None:
++    with pytest.raises(UserNotFound):
++        user_service.get_by_id(9999)
++
++def test_update_user_email_success(user_service: UserService) -> None:
++    reg_cmd = UserRegistrationCommand(email="update_email@example.com", password="password123")
++    user = user_service.register(reg_cmd)
++    
++    update_cmd = UserUpdateCommand(email="new_email@example.com")
++    updated = user_service.update(user.id, update_cmd)
++    
++    assert updated.email == "new_email@example.com"
++    
++    profile = user_service.get_by_id(user.id)
++    assert profile.email == "new_email@example.com"
++
++def test_update_user_email_duplicate(user_service: UserService) -> None:
++    user1 = user_service.register(UserRegistrationCommand(email="user1@example.com", password="password123"))
++    user2 = user_service.register(UserRegistrationCommand(email="user2@example.com", password="password123"))
++    
++    update_cmd = UserUpdateCommand(email="user2@example.com")
++    with pytest.raises(EmailAlreadyExists):
++        user_service.update(user1.id, update_cmd)
++
++def test_update_user_password_success(user_service: UserService) -> None:
++    user = user_service.register(UserRegistrationCommand(email="update_pwd@example.com", password="password123"))
++    
++    update_cmd = UserUpdateCommand(password="new_password123", old_password="password123")
++    updated = user_service.update(user.id, update_cmd)
++    
++    assert updated.id == user.id
++
++def test_update_user_password_invalid_old(user_service: UserService) -> None:
++    user = user_service.register(UserRegistrationCommand(email="update_pwd_fail@example.com", password="password123"))
++    
++    update_cmd = UserUpdateCommand(password="new_password123", old_password="wrongpassword")
++    with pytest.raises(InvalidOldPassword):
++        user_service.update(user.id, update_cmd)
++
++def test_update_user_password_missing_old(user_service: UserService) -> None:
++    user = user_service.register(UserRegistrationCommand(email="update_pwd_missing@example.com", password="password123"))
++    
++    update_cmd = UserUpdateCommand(password="new_password123")
++    with pytest.raises(InvalidOldPassword):
++        user_service.update(user.id, update_cmd)
++
++def test_delete_user_success(user_service: UserService) -> None:
++    user = user_service.register(UserRegistrationCommand(email="delete_me@example.com", password="password123"))
++    
++    user_service.delete(user.id)
++    
++    with pytest.raises(UserNotFound):
++        user_service.get_by_id(user.id)
++
++def test_delete_user_not_found(user_service: UserService) -> None:
++    with pytest.raises(UserNotFound):
++        user_service.delete(9999)

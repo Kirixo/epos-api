@@ -9,12 +9,9 @@ class AuthenticationException(BaseBoundaryException):
 
 class InvalidOrExpiredToken(AuthenticationException):
     def __init__(self) -> None:
-        super().__init__()
+        super().__init__(message_key="invalid_token", code=401)
         
 class InvalidPasswordOrEmail(AuthenticationException):
     def __init__(self) -> None:
-        super().__init__()
+        super().__init__(message_key="invalid_credentials", code=401)
         
-class EmailIsExist(AuthenticationException):
-    def __init__(self) -> None:
-        super().__init__()

@@ -10,6 +10,8 @@ from fastapi.security import OAuth2PasswordBearer
 from app.application.authentication.authentication_protocol import AuthenticationProtocol
 from app.application.authentication.responses import ResolvedUserResponse
 from app.application.authentication.service import AuthenticationService
+from app.application.users.user_protocol import UserServiceProtocol
+from app.application.users.service import UserService
 from app.application.authorization.service import AuthorizationService
 from app.application.contracts.value_codec import ValueCodecProtocol
 from app.application.crud.service import CrudService
@@ -45,15 +47,21 @@ def get_crud_service(
 ) -> CrudService:
     return CrudService(uow_factory, authorization_service)
 
+def get_user_service(
+    uow_factory: UnitOfWorkFactoryProtocol = Depends(get_uow_factory),
+    hash_service: HashProtocol = Depends(get_hash_provider)
+) -> UserServiceProtocol:
+    return UserService(uow_factory, hash_service)
+
 
 # ======================================================
 # Індефікація юзера
 # ======================================================
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
-# АААААААААААААААААААА АНТИПАТЕРНИ
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/v1/auth/token")
+
 @lru_cache
-def user_resolver(
+def get_authentication_service(
     uow_factory: UnitOfWorkFactoryProtocol = Depends(get_uow_factory),
     hash_service: HashProtocol = Depends(get_hash_provider)
 ) -> AuthenticationProtocol:
@@ -65,6 +73,6 @@ def user_resolver(
 
 def resolve_user(
     token: str = Depends(oauth2_scheme),
-    user_resolver: AuthenticationProtocol = Depends(user_resolver)
+    auth_service: AuthenticationProtocol = Depends(get_authentication_service)
 ) -> ResolvedUserResponse:
-    return user_resolver.resolve_user(token)
+    return auth_service.resolve_user(token)
