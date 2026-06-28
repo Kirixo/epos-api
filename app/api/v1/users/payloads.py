@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from pydantic import BaseModel, Field
 
 class UserRegistrationPayload(BaseModel):
@@ -12,3 +14,5 @@ class UserUpdatePayload(BaseModel):
 class UserResponsePayload(BaseModel):
     id: int
     email: str
+    created_at: datetime | None = None
+    updated_at: datetime | None = None

@@ -7,9 +7,9 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from app.domain.access.user_access_repository_protocol import UserWorkspaceAccessRepositoryProtocol
-from app.domain.crud.crud_repository_protocol import CrudRepositoryProtocol
 from app.domain.uow import UnitOfWorkFactoryProtocol, UnitOfWorkProtocol
 from app.domain.user.user_repository_protocol import UserRepositoryProtocol
+from app.domain.user.revoked_token_repository_protocol import RevokedTokenRepositoryProtocol
 from app.infra.db.repositories.factory import GeneralRepositoriesFactory
 from app.infra.exception import BaseInfraException
 
@@ -17,8 +17,8 @@ from app.infra.exception import BaseInfraException
 
 class GeneralUnitOfWork(UnitOfWorkProtocol):
     workspace_access_repo: UserWorkspaceAccessRepositoryProtocol
-    crud_repo: CrudRepositoryProtocol
     user_repo: UserRepositoryProtocol
+    revoked_token_repo: RevokedTokenRepositoryProtocol
 
     def __init__(
         self,
@@ -34,8 +34,8 @@ class GeneralUnitOfWork(UnitOfWorkProtocol):
         if self.session is None:
             raise BaseInfraException("UoW session is not started")
         self.workspace_access_repo = self._repository_factory.workspace_access_repo(self.session)
-        self.crud_repo = self._repository_factory.crud_repository(self.session)
         self.user_repo = self._repository_factory.user_repository(self.session)
+        self.revoked_token_repo = self._repository_factory.revoked_token_repository(self.session)
         
         return self
 

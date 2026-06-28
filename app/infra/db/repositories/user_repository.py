@@ -48,9 +48,11 @@ class UserRepository(UserRepositoryProtocol):
         if model.id is None:
             self.session.add(model)
             self.session.flush()
+            self.session.refresh(model)
         else:
-            self.session.merge(model)
+            model = self.session.merge(model)
             self.session.flush()
+            self.session.refresh(model)
         return self._to_entity(model)
 
     def delete(self, *, id: int) -> UserEntity | None:

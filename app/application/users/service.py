@@ -43,7 +43,9 @@ class UserService(UserServiceProtocol):
             
             return UserResponse(
                 id=new_user.id,
-                email=new_user.email
+                email=new_user.email,
+                created_at=new_user.created_at,
+                updated_at=new_user.updated_at,
             )
 
     def update(self, user_id: int, command: UserUpdateCommand) -> UserResponse:
@@ -84,7 +86,9 @@ class UserService(UserServiceProtocol):
             
             return UserResponse(
                 id=updated_user.id,
-                email=updated_user.email
+                email=updated_user.email,
+                created_at=updated_user.created_at,
+                updated_at=updated_user.updated_at,
             )
 
     def delete(self, user_id: int) -> None:
@@ -106,5 +110,7 @@ class UserService(UserServiceProtocol):
                 
             return UserResponse(
                 id=user.id,
-                email=user.email
+                email=user.email,
+                created_at=user.created_at,
+                updated_at=user.updated_at,
             )
