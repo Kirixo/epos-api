@@ -1,0 +1,9 @@
+$kind: http-request
+name: Delete Profile
+url: "{{baseUrl}}/v1/users/me"
+method: DELETE
+auth:
+  type: bearer
+  credentials:
+    token: "{{Token}}"
+order: 4351999037191174

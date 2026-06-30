@@ -50,7 +50,9 @@ class UserRepository(UserRepositoryProtocol):
             self.session.flush()
             self.session.refresh(model)
         else:
-            model = self.session.merge(model)
+            merged_model = self.session.merge(model)
+            if isinstance(merged_model, User):
+                model = merged_model
             self.session.flush()
             self.session.refresh(model)
         return self._to_entity(model)

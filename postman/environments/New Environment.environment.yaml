@@ -2,3 +2,7 @@ name: New Environment
 values:
   - key: baseUrl
     value: 'http://localhost:8000'
+  - key: Token
+    secret: true
+  - key: RefreshToken
+    secret: true
