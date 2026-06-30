@@ -1,0 +1,17 @@
+$kind: http-request
+name: Update Profile
+url: "{{baseUrl}}/v1/users/me"
+method: PATCH
+auth:
+  type: bearer
+  credentials:
+    token: "{{Token}}"
+body:
+  type: json
+  content: |-
+    {
+        "email": "updated@example.com",
+        "password": "newsecurepassword123",
+        "old_password": "11111111"
+    }
+order: 4246070417697749

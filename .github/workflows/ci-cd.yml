@@ -30,7 +30,7 @@ env:
   SECRET: ci-secret
   VERSION: ci
   DESCRIPTION: CI test environment
-  DEBUG_MODE: "true"
+  DEBUG_MODE: "false"
 
 jobs:
   detect-merged-pr:

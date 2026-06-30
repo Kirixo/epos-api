@@ -4,14 +4,14 @@ from types import TracebackType
 from typing import Any, Protocol
 
 from app.domain.access.user_access_repository_protocol import UserWorkspaceAccessRepositoryProtocol
-from app.domain.crud.crud_repository_protocol import CrudRepositoryProtocol
 from app.domain.user.user_repository_protocol import UserRepositoryProtocol
+from app.domain.user.revoked_token_repository_protocol import RevokedTokenRepositoryProtocol
 
 
 
 class UnitOfWorkProtocol(Protocol):
-    crud_repo: CrudRepositoryProtocol
     user_repo: UserRepositoryProtocol
+    revoked_token_repo: RevokedTokenRepositoryProtocol
     workspace_access_repo: UserWorkspaceAccessRepositoryProtocol
 
     def __enter__(self) -> "UnitOfWorkProtocol": ...

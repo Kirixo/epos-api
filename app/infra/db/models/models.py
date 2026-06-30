@@ -1,8 +1,7 @@
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
@@ -57,7 +56,7 @@ class AuditLog(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
     action: Mapped[str] = mapped_column(String(255), nullable=False)
-    details: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False, default={})
+    details: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default={})
     ip_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     ip_salt: Mapped[str] = mapped_column(String(255), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)

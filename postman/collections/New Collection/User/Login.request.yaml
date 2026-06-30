@@ -1,0 +1,16 @@
+$kind: http-request
+name: Login
+url: "{{baseUrl}}/v1/auth/token"
+method: POST
+body:
+  type: formdata
+  content:
+    - type: text
+      key: email
+      value: test3@gmail.com
+      disabled: false
+    - type: text
+      key: password
+      value: "11111111"
+      disabled: false
+order: 3685871300427166

@@ -49,6 +49,8 @@ services:
         condition: service_healthy
     volumes:
       - ./alembic:/app/alembic
+      - ./tests:/app/tests
+      - ./app:/app/app
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
