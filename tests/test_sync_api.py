@@ -1,0 +1,111 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Generator
+
+import pytest
+from fastapi.testclient import TestClient
+
+from app.application.sync.service import WorkspaceSyncService
+from app.domain.sync.sync_repository_protocol import (
+    SyncUpdateRecord,
+    WorkspaceSyncRepositoryProtocol,
+)
+from app.di.dependencies import get_sync_service
+
+
+@dataclass
+class _FakeSyncStore:
+    updates: list[tuple[str, int, str, str]]
+    counter: int = 0
+
+    def append_update(
+        self,
+        *,
+        user_id: int,
+        workspace_id: str,
+        payload: str,
+    ) -> str:
+        self.counter += 1
+        cursor = f"cursor-{self.counter}"
+        self.updates.append((cursor, user_id, workspace_id, payload))
+        return cursor
+
+    def list_updates(
+        self,
+        *,
+        user_id: int,
+        workspace_id: str,
+        after_cursor: str | None = None,
+    ) -> list[SyncUpdateRecord]:
+        result: list[SyncUpdateRecord] = []
+        seen_cursor = after_cursor or ""
+        for cursor, stored_user_id, stored_workspace_id, payload in self.updates:
+            if (
+                stored_user_id == user_id
+                and stored_workspace_id == workspace_id
+                and cursor > seen_cursor
+            ):
+                result.append(
+                    SyncUpdateRecord(cursor=cursor, payload=payload),
+                )
+        return result
+
+
+@pytest.fixture()
+def sync_override() -> Generator[WorkspaceSyncService, None, None]:
+    store: WorkspaceSyncRepositoryProtocol = _FakeSyncStore(updates=[])
+    service = WorkspaceSyncService(store)
+    from app.main import app
+
+    app.dependency_overrides[get_sync_service] = lambda: service
+    yield service
+    app.dependency_overrides.pop(get_sync_service, None)
+
+
+def test_push_and_pull_sync_updates(
+    client: TestClient,
+    sync_override: WorkspaceSyncService,
+) -> None:
+    response = client.post(
+        "/v1/users/register",
+        json={"email": "sync_api@example.com", "password": "securepassword123"},
+    )
+    token = response.json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    push_one = client.post(
+        "/v1/sync/push",
+        headers=headers,
+        json={"workspace_id": "workspace-a", "payload": "update-a"},
+    )
+    assert push_one.status_code == 200
+    cursor_one = push_one.json()["cursor"]
+
+    push_two = client.post(
+        "/v1/sync/push",
+        headers=headers,
+        json={"workspace_id": "workspace-a", "payload": "update-b"},
+    )
+    assert push_two.status_code == 200
+
+    pull_all = client.get(
+        "/v1/sync/pull",
+        headers=headers,
+        params={"workspace_id": "workspace-a"},
+    )
+    assert pull_all.status_code == 200
+    assert [item["payload"] for item in pull_all.json()["updates"]] == [
+        "update-a",
+        "update-b",
+    ]
+
+    pull_delta = client.get(
+        "/v1/sync/pull",
+        headers=headers,
+        params={"workspace_id": "workspace-a", "after_cursor": cursor_one},
+    )
+    assert pull_delta.status_code == 200
+    assert [item["payload"] for item in pull_delta.json()["updates"]] == [
+        "update-b",
+    ]

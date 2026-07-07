@@ -16,6 +16,8 @@ class Settings(BaseSettings):
     secret: str = Field(alias="SECRET")
     version: str = Field(alias="VERSION")
     description: str = Field(alias="DESCRIPTION")
+    mongo_uri: str = Field(default="mongodb://mongo:27017", alias="MONGO_URI")
+    mongo_db: str = Field(default="opepic_sync", alias="MONGO_DB")
     
     model_config = SettingsConfigDict(
         env_file=".env",
