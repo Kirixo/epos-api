@@ -39,11 +39,23 @@ docker compose exec api pytest tests/
 
 ## Sync API
 
-The sync layer is auth-scoped and stores only encrypted payloads. The client pushes opaque updates to:
+The sync layer is auth-scoped and stores only opaque payloads. Workspace content still uses
+encrypted CRDT updates, while workspace discovery uses a separate catalog stream so devices can
+learn about workspaces created elsewhere.
+
+Workspace content sync:
 
 - `POST /v1/sync/push`
 - `GET /v1/sync/pull?workspace_id=...&after_cursor=...`
 
-The server never decrypts workspace data.
+Workspace catalog sync:
+
+- `POST /v1/sync/catalog/push`
+- `GET /v1/sync/catalog/pull?after_cursor=...`
+
+`after_cursor` is the last update id the client has already applied from that stream. The server
+returns only newer updates after that point.
+
+The server never decrypts workspace content data.
 Browser and Electron clients can call these endpoints directly from the renderer because the API
 sets explicit CORS headers for the configured allowed origins.

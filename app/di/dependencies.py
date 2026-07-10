@@ -6,6 +6,7 @@ from fastapi.security import OAuth2PasswordBearer
 from app.application.authentication.authentication_protocol import AuthenticationProtocol
 from app.application.authentication.responses import CurrentUserResponse
 from app.application.authentication.service import AuthenticationService
+from app.application.sync.catalog_service import WorkspaceCatalogSyncService
 from app.application.sync.service import WorkspaceSyncService
 from app.application.users.user_protocol import UserServiceProtocol
 from app.application.users.service import UserService
@@ -15,7 +16,10 @@ from app.core.config import settings
 from app.infra.db.guow import GeneralUnitOfWorkFactory
 from app.infra.db.session import SessionFactory
 from app.infra.services.hashing import ServerHashProvider
-from app.infra.sync.mongo_repository import MongoWorkspaceSyncRepository
+from app.infra.sync.mongo_repository import (
+    MongoWorkspaceCatalogRepository,
+    MongoWorkspaceSyncRepository,
+)
 from typing import Any
 from pymongo import MongoClient
 
@@ -70,3 +74,17 @@ def get_sync_service(
     repository: MongoWorkspaceSyncRepository = Depends(get_sync_repository),
 ) -> WorkspaceSyncService:
     return WorkspaceSyncService(repository)
+
+
+def get_catalog_sync_repository() -> MongoWorkspaceCatalogRepository:
+    global _mongo_client
+    if _mongo_client is None:
+        _mongo_client = MongoClient(settings.mongo_uri, serverSelectionTimeoutMS=2000)
+
+    return MongoWorkspaceCatalogRepository(_mongo_client, settings.mongo_db)
+
+
+def get_catalog_sync_service(
+    repository: MongoWorkspaceCatalogRepository = Depends(get_catalog_sync_repository),
+) -> WorkspaceCatalogSyncService:
+    return WorkspaceCatalogSyncService(repository)
