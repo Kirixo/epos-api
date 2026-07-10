@@ -109,3 +109,19 @@ def test_push_and_pull_sync_updates(
     assert [item["payload"] for item in pull_delta.json()["updates"]] == [
         "update-b",
     ]
+
+
+def test_sync_pull_preflight_allows_configured_origin(client: TestClient) -> None:
+    response = client.options(
+        "/v1/sync/pull?workspace_id=workspace-a",
+        headers={
+            "Origin": "http://localhost:3000",
+            "Access-Control-Request-Method": "GET",
+            "Access-Control-Request-Headers": "authorization",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == "http://localhost:3000"
+    assert "GET" in response.headers["access-control-allow-methods"]
+    assert "authorization" in response.headers["access-control-allow-headers"].lower()
