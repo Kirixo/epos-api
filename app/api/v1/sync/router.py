@@ -56,8 +56,7 @@ def push_catalog_sync(
 ) -> JsonDict:
     response = sync_service.push(
         user_id=current_user.id,
-        workspace_id=body.workspace_id,
-        title=body.title,
+        payload=body.payload,
     )
     return response.model_dump()
 

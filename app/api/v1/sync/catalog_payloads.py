@@ -4,8 +4,7 @@ from app.api.v1.transport import TransportPayload
 
 
 class CatalogPushPayload(TransportPayload):
-    workspace_id: str
-    title: str
+    payload: str
 
 
 class CatalogPullQueryPayload(TransportPayload):

@@ -9,8 +9,7 @@ class CatalogPushResponse(BaseResponse):
 
 class CatalogUpdateResponse(BaseResponse):
     cursor: str
-    workspace_id: str
-    title: str
+    payload: str
 
 
 class CatalogPullResponse(BaseResponse):

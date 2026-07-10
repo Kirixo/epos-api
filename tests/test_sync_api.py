@@ -181,18 +181,20 @@ def test_catalog_push_and_pull_sync_updates(
     token = response.json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
 
+    payload_one = "encrypted-catalog-update-a"
     push_one = client.post(
         "/v1/sync/catalog/push",
         headers=headers,
-        json={"workspace_id": "workspace-a", "title": "Alpha"},
+        json={"payload": payload_one},
     )
     assert push_one.status_code == 200
     cursor_one = push_one.json()["cursor"]
 
+    payload_two = "encrypted-catalog-update-b"
     push_two = client.post(
         "/v1/sync/catalog/push",
         headers=headers,
-        json={"workspace_id": "workspace-b", "title": "Beta"},
+        json={"payload": payload_two},
     )
     assert push_two.status_code == 200
 
@@ -201,13 +203,9 @@ def test_catalog_push_and_pull_sync_updates(
         headers=headers,
     )
     assert pull_all.status_code == 200
-    assert [item["workspace_id"] for item in pull_all.json()["updates"]] == [
-        "workspace-a",
-        "workspace-b",
-    ]
-    assert [item["title"] for item in pull_all.json()["updates"]] == [
-        "Alpha",
-        "Beta",
+    assert [item["payload"] for item in pull_all.json()["updates"]] == [
+        payload_one,
+        payload_two,
     ]
 
     pull_delta = client.get(
@@ -216,6 +214,6 @@ def test_catalog_push_and_pull_sync_updates(
         params={"after_cursor": cursor_one},
     )
     assert pull_delta.status_code == 200
-    assert [item["workspace_id"] for item in pull_delta.json()["updates"]] == [
-        "workspace-b",
+    assert [item["payload"] for item in pull_delta.json()["updates"]] == [
+        payload_two,
     ]

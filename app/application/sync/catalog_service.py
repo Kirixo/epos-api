@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import json
-
 from app.application.sync.catalog_responses import (
     CatalogPullResponse,
     CatalogPushResponse,
@@ -20,19 +18,11 @@ class WorkspaceCatalogSyncService:
         self,
         *,
         user_id: int,
-        workspace_id: str,
-        title: str,
+        payload: str,
     ) -> CatalogPushResponse:
         cursor = self._repository.append_update(
             user_id=user_id,
-            payload=json.dumps(
-                {
-                    "workspace_id": workspace_id,
-                    "title": title,
-                },
-                ensure_ascii=False,
-                separators=(",", ":"),
-            ),
+            payload=payload,
         )
         return CatalogPushResponse(cursor=cursor)
 
@@ -49,12 +39,10 @@ class WorkspaceCatalogSyncService:
 
         result: list[CatalogUpdateResponse] = []
         for update in updates:
-            payload = json.loads(update.payload)
             result.append(
                 CatalogUpdateResponse(
                     cursor=update.cursor,
-                    workspace_id=str(payload["workspace_id"]),
-                    title=str(payload["title"]),
+                    payload=update.payload,
                 )
             )
 
