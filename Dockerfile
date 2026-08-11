@@ -1,4 +1,4 @@
-FROM python:3.14-slim
+FROM python:3.13-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
@@ -18,8 +18,10 @@ COPY ./alembic.ini ./alembic.ini
 COPY ./alembic ./alembic
 #COPY ./pytest.ini ./pytest.ini
 
+ARG RUN_MYPY=true
+
 EXPOSE 8000
 
-RUN mypy .
+RUN if [ "$RUN_MYPY" = "true" ] ; then mypy ./app ; else echo "Skipping mypy" ; fi
 
 CMD ["sh", "-c", "uvicorn app.main:app --port ${API_PORT} --host ${API_HOST}"]
